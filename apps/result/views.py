@@ -4,11 +4,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import DetailView, ListView, View
 from django.template.loader import get_template
-from xhtml2pdf import pisa
 from io import BytesIO
 from django.http import HttpResponse
 from django.conf import settings
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from apps.corecode.models import StudentClass
 from apps.students.models import Student
@@ -237,27 +239,112 @@ def report_card(request, student_id):
     return render(request, 'result/report_card.html', context)
 
 
-def xhtml2pdf_link_callback(uri, rel):
-    # Convert URIs to absolute system paths for xhtml2pdf (static/media)
-    if settings.STATIC_URL and uri.startswith(settings.STATIC_URL):
-        # Prefer STATIC_ROOT if collectstatic used, otherwise first STATICFILES_DIRS
-        base = settings.STATIC_ROOT or (settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else '')
-        path = os.path.join(base, uri.replace(settings.STATIC_URL, ''))
-        return path
-    if settings.MEDIA_URL and uri.startswith(settings.MEDIA_URL):
-        return os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ''))
-    # Return the original URI for absolute URLs
-    return uri
-
 @login_required
 def render_to_pdf(request, template_src, context_dict={}):
+    """
+    Render HTML template to PDF using Playwright (Windows-friendly).
+    Falls back to xhtml2pdf if Playwright is not available.
+    """
     template = get_template(template_src)
-    html = template.render(context=context_dict, request=request)
-    result = BytesIO()
-    pdf = pisa.pisaDocument(BytesIO(html.encode('UTF-8')), result, encoding='UTF-8', link_callback=xhtml2pdf_link_callback)
-    if not pdf.err:
+    html_content = template.render(context=context_dict, request=request)
+    
+    # Try Playwright first (best for Windows, no system dependencies)
+    try:
+        from playwright.sync_api import sync_playwright
+        
+        result = BytesIO()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            
+            # Build absolute base URL for resolving static and media files
+            base_url = request.build_absolute_uri('/')
+            
+            # Set content with base URL for resolving relative paths
+            page.set_content(html_content, base_url=base_url)
+            
+            # Generate PDF
+            pdf_bytes = page.pdf(
+                format='A4',
+                margin={'top': '16mm', 'right': '14mm', 'bottom': '16mm', 'left': '14mm'},
+                print_background=True
+            )
+            
+            result.write(pdf_bytes)
+            browser.close()
+        
+        result.seek(0)
         return HttpResponse(result.getvalue(), content_type='application/pdf')
-    return None
+    
+    except ImportError:
+        # Playwright not installed, fallback to xhtml2pdf
+        logger.warning('Playwright not available, falling back to xhtml2pdf')
+        try:
+            from xhtml2pdf import pisa
+            from django.contrib.staticfiles import finders
+            
+            def link_callback(uri, rel):
+                """Convert URIs to absolute system paths for static/media files"""
+                # Handle static files
+                if settings.STATIC_URL and uri.startswith(settings.STATIC_URL):
+                    # Remove the static URL prefix
+                    static_path = uri.replace(settings.STATIC_URL, '').lstrip('/')
+                    
+                    # Try to find the file using Django's staticfiles finder
+                    found_path = finders.find(static_path)
+                    if found_path and os.path.exists(found_path):
+                        return found_path
+                    
+                    # Fallback: try STATIC_ROOT
+                    if settings.STATIC_ROOT:
+                        path = os.path.join(settings.STATIC_ROOT, static_path)
+                        if os.path.exists(path):
+                            return path
+                    
+                    # Fallback: try STATICFILES_DIRS
+                    if settings.STATICFILES_DIRS:
+                        for static_dir in settings.STATICFILES_DIRS:
+                            path = os.path.join(static_dir, static_path)
+                            if os.path.exists(path):
+                                return path
+                    
+                    logger.warning(f'Static file not found: {uri}')
+                    return uri
+                
+                # Handle media files
+                if settings.MEDIA_URL and uri.startswith(settings.MEDIA_URL):
+                    media_path = uri.replace(settings.MEDIA_URL, '').lstrip('/')
+                    path = os.path.join(settings.MEDIA_ROOT, media_path)
+                    if os.path.exists(path):
+                        return path
+                    logger.warning(f'Media file not found: {uri}')
+                    return uri
+                
+                # Return original URI for absolute URLs or other cases
+                return uri
+            
+            result = BytesIO()
+            pdf = pisa.pisaDocument(
+                BytesIO(html_content.encode('UTF-8')), 
+                result, 
+                encoding='UTF-8', 
+                link_callback=link_callback
+            )
+            
+            if not pdf.err:
+                result.seek(0)
+                return HttpResponse(result.getvalue(), content_type='application/pdf')
+            else:
+                logger.error(f'xhtml2pdf error: {pdf.err}')
+                return None
+                
+        except ImportError:
+            logger.error('Neither Playwright nor xhtml2pdf is available')
+            return None
+    
+    except Exception as e:
+        logger.error(f'PDF generation error: {str(e)}', exc_info=True)
+        return None
 
 
 @login_required
@@ -370,10 +457,15 @@ def class_report_cards_pdf(request, class_id):
         }
         # Render each student's PDF HTML
         template = get_template('result/report_card_pdf.html')
-        html = template.render(context=context, request=request)
-        pdf_io = BytesIO()
-        pisa.pisaDocument(BytesIO(html.encode('UTF-8')), pdf_io, encoding='UTF-8', link_callback=xhtml2pdf_link_callback)
-        pdf_buffers.append(pdf_io.getvalue())
+        html_content = template.render(context=context, request=request)
+        
+        # Use render_to_pdf helper for consistency
+        pdf_response = render_to_pdf(request, 'result/report_card_pdf.html', context)
+        if pdf_response:
+            pdf_buffers.append(pdf_response.content)
+        else:
+            logger.warning(f'Failed to generate PDF for student {student.id}, skipping...')
+            continue
 
     # Merge PDFs into a single file (simple concatenation via PyPDF2 if available)
     try:
