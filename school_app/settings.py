@@ -22,7 +22,7 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv(
     'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,edusync-5jgu.onrender.com,192.168.100.12,strengthen-faces-del-newcastle.trycloudflare.com'
+    'localhost,127.0.0.1,edusync-5jgu.onrender.com,school-management-framework.onrender.com,192.168.100.12,strengthen-faces-del-newcastle.trycloudflare.com'
 ).split(',')
 
 # Application definition
@@ -185,4 +185,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 CSRF_TRUSTED_ORIGINS = [
     "https://strengthen-faces-del-newcastle.trycloudflare.com",
+    "https://school-management-framework.onrender.com",
+    "https://edusync-5jgu.onrender.com",
 ]
