@@ -73,6 +73,13 @@ def create_result(request):
                 session = form.cleaned_data["session"]
                 term = form.cleaned_data["term"]
                 students = request.POST["students"]
+                
+                # Store selected students in session for edit_results
+                request.session['selected_students'] = students.split(",")
+                request.session['selected_subjects'] = [str(subj.id) for subj in subjects]
+                request.session['results_session'] = str(session.id) if session else None
+                request.session['results_term'] = str(term.id) if term else None
+                
                 results = []
                 for student in students.split(","):
                     stu = Student.objects.get(pk=student)
@@ -122,17 +129,66 @@ def create_result(request):
 @login_required
 def edit_results(request):
     if request.method == "POST":
-        form = EditResults(request.POST)
-        if form.is_valid():
-            form.save()
+        # Get the formset from POST data
+        formset = EditResults(request.POST)
+        if formset.is_valid():
+            formset.save()
             messages.success(request, "Results successfully updated")
+            
+            # Clear session data after successful save
+            if 'selected_students' in request.session:
+                del request.session['selected_students']
+            if 'selected_subjects' in request.session:
+                del request.session['selected_subjects']
+                
             return redirect("edit-results")
     else:
-        results = Result.objects.filter(
-            session=request.current_session, term=request.current_term
-        )
-        form = EditResults(queryset=results)
-    return render(request, "result/edit_results.html", {"formset": form})
+        # Get selected students from session
+        selected_student_ids = request.session.get('selected_students', [])
+        selected_subject_ids = request.session.get('selected_subjects', [])
+        session_id = request.session.get('results_session')
+        term_id = request.session.get('results_term')
+        
+        # If no selected students in session, fall back to current session/term
+        if not selected_student_ids:
+            results = Result.objects.filter(
+                session=request.current_session, 
+                term=request.current_term
+            )
+        else:
+            # Filter results to only show selected students and subjects
+            results = Result.objects.filter(
+                student__id__in=selected_student_ids,
+                subject__id__in=selected_subject_ids,
+                session_id=session_id or request.current_session.id,
+                term_id=term_id or request.current_term.id
+            )
+        
+        formset = EditResults(queryset=results)
+    
+    # Prepare data for template grouping
+    selected_student_ids = request.session.get('selected_students', [])
+    students_data = []
+    
+    if selected_student_ids:
+        students = Student.objects.filter(id__in=selected_student_ids)
+        for student in students:
+            student_forms = [form for form in formset if form.instance.student_id == student.id]
+            students_data.append({
+                'student': student,
+                'forms': student_forms,
+                'results_count': len(student_forms)
+            })
+    
+    context = {
+        "formset": formset,
+        "students_data": students_data,
+        "selected_students_count": len(selected_student_ids),
+        "subjects_count": len(request.session.get('selected_subjects', [])),
+        "session": request.current_session,
+        "term": request.current_term,
+    }
+    return render(request, "result/edit_results.html", context)
 
 
 class ResultListView(LoginRequiredMixin, View):
@@ -261,7 +317,7 @@ def render_to_pdf(request, template_src, context_dict={}):
             base_url = request.build_absolute_uri('/')
             
             # Set content with base URL for resolving relative paths
-            page.set_content(html_content, base_url=base_url)
+            page.set_content(html_content)
             
             # Generate PDF
             pdf_bytes = page.pdf(
