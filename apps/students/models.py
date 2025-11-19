@@ -60,6 +60,30 @@ class Student(models.Model):
     def get_absolute_url(self):
         return reverse("student-detail", kwargs={"pk": self.pk})
 
+    def get_full_name(self):
+        """Return the full name of the student"""
+        full_name = f"{self.surname} {self.firstname}"
+        if self.other_name:
+            full_name += f" {self.other_name}"
+        return full_name.strip()
+
+    def get_short_name(self):
+        """Return short name (surname + firstname only)"""
+        return f"{self.surname} {self.firstname}"
+
+    def get_formal_name(self):
+        """Return name in formal format (Surname, Firstname Othername)"""
+        if self.other_name:
+            return f"{self.surname}, {self.firstname} {self.other_name}"
+        return f"{self.surname}, {self.firstname}"
+
+    def get_initials(self):
+        """Return initials of the student"""
+        initials = f"{self.surname[0]}{self.firstname[0]}" if self.surname and self.firstname else ""
+        if self.other_name:
+            initials += self.other_name[0]
+        return initials.upper()
+
 
 class StudentBulkUpload(models.Model):
     date_uploaded = models.DateTimeField(auto_now=True)

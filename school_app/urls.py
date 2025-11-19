@@ -36,7 +36,7 @@ urlpatterns = [
     
     path('admin/', admin.site.urls),
     path('', include('apps.corecode.urls')),
-    path('students/', include('apps.students.urls')),
+    path('students/', include('apps.students.urls', namespace='students')),  # ADDED NAMESPACE
     path('staffs/', include('apps.staffs.urls')),
     path('finance/', include('apps.finance.urls')),
     path('result/', include('apps.result.urls')),
@@ -46,6 +46,7 @@ urlpatterns = [
     path('manifest.json', manifest_view, name='manifest'),
     path('service-worker.js', service_worker_view, name='service_worker'),
     path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
+    path('idcards/', include('apps.idcards.urls', namespace='idcards')),  # ADDED NAMESPACE
 ]
 
 if settings.DEBUG:

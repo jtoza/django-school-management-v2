@@ -1,0 +1,218 @@
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
+from django.core.paginator import Paginator
+from datetime import timedelta
+import os
+from apps.students.models import Student
+from apps.corecode.models import StudentClass
+from .models import StudentIDCard, IDCardTemplate
+from .utils import generate_student_id, generate_barcode
+from django.views.generic import View
+from django.contrib import messages
+from apps.students.models import Student
+
+@login_required
+def idcard_dashboard(request):
+    """ID Card Management Dashboard"""
+    total_students = Student.objects.filter(current_status='active').count()
+    idcards_generated = StudentIDCard.objects.count()
+    expired_cards = StudentIDCard.objects.filter(expiry_date__lt=timezone.now().date()).count()
+    
+    context = {
+        'total_students': total_students,
+        'idcards_generated': idcards_generated,
+        'expired_cards': expired_cards,
+    }
+    return render(request, 'idcards/dashboard.html', context)
+
+@login_required
+def generate_id_card(request, student_id):
+    """Generate ID card for individual student"""
+    student = get_object_or_404(Student, id=student_id)
+    
+    # Create or get existing ID card
+    id_card, created = StudentIDCard.objects.get_or_create(
+        student=student,
+        defaults={
+            'id_number': generate_student_id(),
+            'expiry_date': timezone.now().date() + timedelta(days=365),
+            'template_used': 'default'
+        }
+    )
+    
+    if created:
+        messages.success(request, f'ID card created for {student.get_full_name()}')
+    
+    context = {
+        'student': student,
+        'id_card': id_card,
+        'school_name': 'GREEN BELLS ACADEMY',
+        'school_motto': 'IN PURSUIT OF EXCELLENCE',
+        'today': timezone.now().date(),
+    }
+    return render(request, 'idcards/id_card_preview.html', context)
+
+@login_required
+def bulk_generate_id_cards(request):
+    """Bulk generate ID cards for all active students"""
+    if request.method == 'POST':
+        student_ids = request.POST.getlist('students')
+        if student_ids:
+            generated_count = 0
+            for student_id in student_ids:
+                student = get_object_or_404(Student, id=student_id)
+                id_card, created = StudentIDCard.objects.get_or_create(
+                    student=student,
+                    defaults={
+                        'id_number': generate_student_id(),
+                        'expiry_date': timezone.now().date() + timedelta(days=365),
+                        'template_used': 'default'
+                    }
+                )
+                if created:
+                    generated_count += 1
+            
+            messages.success(request, f'Successfully generated {generated_count} ID cards')
+            return redirect('idcards:idcard-list')
+    
+    # GET request - show student selection
+    students = Student.objects.filter(current_status='active')
+    classes = StudentClass.objects.all()
+    
+    context = {
+        'students': students,
+        'classes': classes,
+    }
+    return render(request, 'idcards/bulk_generate.html', context)
+
+@login_required
+def bulk_generate_class_id_cards(request, class_id):
+    """Generate ID cards for entire class"""
+    student_class = get_object_or_404(StudentClass, id=class_id)
+    students = Student.objects.filter(current_class=student_class, current_status='active')
+    
+    generated_cards = []
+    for student in students:
+        id_card, created = StudentIDCard.objects.get_or_create(
+            student=student,
+            defaults={
+                'id_number': generate_student_id(),
+                'expiry_date': timezone.now().date() + timedelta(days=365),
+                'template_used': 'default'
+            }
+        )
+        
+        if created:
+            generated_cards.append(id_card)
+    
+    messages.success(request, f'Generated ID cards for {len(generated_cards)} students in {student_class.name}')
+    
+    context = {
+        'generated_cards': generated_cards,
+        'student_class': student_class,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'idcards/bulk_generation_result.html', context)
+
+@login_required
+def download_id_card_pdf(request, student_id):
+    """Download individual ID card as PDF"""
+    from apps.result.views import render_to_pdf
+    
+    student = get_object_or_404(Student, id=student_id)
+    id_card = get_object_or_404(StudentIDCard, student=student)
+    
+    context = {
+        'student': student,
+        'id_card': id_card,
+        'school_name': 'GREEN BELLS ACADEMY',
+        'school_motto': 'IN PURSUIT OF EXCELLENCE',
+        'today': timezone.now().date(),
+    }
+    
+    response = render_to_pdf(request, 'idcards/id_card_pdf.html', context)
+    if response:
+        filename = f"id_card_{student.registration_number}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    else:
+        messages.error(request, 'Failed to generate PDF')
+        return redirect('idcards:generate-idcard', student_id=student_id)
+
+@login_required
+def download_bulk_id_cards(request):
+    """Download multiple ID cards as ZIP"""
+    # This is a placeholder - you can implement ZIP generation later
+    messages.info(request, 'Bulk download feature coming soon!')
+    return redirect('idcards:idcard-list')
+
+@login_required
+def manage_templates(request):
+    """Manage ID card templates"""
+    templates = IDCardTemplate.objects.all()
+    
+    context = {
+        'templates': templates,
+    }
+    return render(request, 'idcards/manage_templates.html', context)
+
+@login_required
+def idcard_list(request):
+    """List all ID cards"""
+    idcards_list = StudentIDCard.objects.select_related('student').all()
+    
+    # Pagination
+    paginator = Paginator(idcards_list, 12)  # 12 cards per page
+    page_number = request.GET.get('page')
+    idcards = paginator.get_page(page_number)
+    
+    classes = StudentClass.objects.all()
+    
+    context = {
+        'idcards': idcards,
+        'classes': classes,
+        'today': timezone.now().date(),
+    }
+    return render(request, 'idcards/idcard_list.html', context)
+
+@login_required
+def renew_id_card(request, student_id):
+    """Renew an expired ID card"""
+    student = get_object_or_404(Student, id=student_id)
+    id_card = get_object_or_404(StudentIDCard, student=student)
+    
+    # Renew the card by updating expiry date
+    id_card.expiry_date = timezone.now().date() + timedelta(days=365)
+    id_card.is_active = True
+    id_card.save()
+    
+    messages.success(request, f'ID card renewed for {student.get_full_name()}. Valid until {id_card.expiry_date}')
+    return redirect('idcards:generate-idcard', student_id=student_id)
+
+
+
+
+# Add this class to your views.py
+class IDCardSearchView(View):
+    def get(self, request):
+        return render(request, 'idcards/idcard_search.html')
+    
+    def post(self, request):
+        registration_number = request.POST.get('registration_number', '').strip()
+        
+        if not registration_number:
+            messages.error(request, 'Please enter a registration number')
+            return render(request, 'idcards/idcard_search.html')
+        
+        try:
+            # Find student by registration number
+            student = Student.objects.get(registration_number=registration_number)
+            # Redirect to the ID card generation page for this student
+            return redirect('idcards:generate-idcard', student_id=student.id)
+            
+        except Student.DoesNotExist:
+            messages.error(request, f'Student with registration number "{registration_number}" not found')
+            return render(request, 'idcards/idcard_search.html')

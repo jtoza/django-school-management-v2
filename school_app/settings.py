@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.result",
     "attendance",
     "crispy_bootstrap4",
+    'apps.idcards',
 ]
 
 MIDDLEWARE = [

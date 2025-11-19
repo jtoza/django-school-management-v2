@@ -750,7 +750,7 @@
           <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
             <!-- Main Navigation -->
             <li class="nav-item">
-              <a href="{% url 'student-list' %}" class="nav-link">
+              <a href="{% url 'students:student-list' %}" class="nav-link">
                 <i class="nav-icon fas fa-graduation-cap"></i>
                 <p>Students</p>
               </a>
@@ -820,6 +820,45 @@
 
             <!-- Management Section -->
             <li class="nav-header">Management</li>
+
+            <!-- ID Card Management -->
+            <li class="nav-item has-treeview">
+              <a href="#" class="nav-link">
+                <i class="nav-icon fas fa-id-card"></i>
+                <p>
+                  ID Cards
+                  <i class="fas fa-angle-left right"></i>
+                </p>
+              </a>
+              <ul class="nav nav-treeview">
+                <li class="nav-item">
+                  <a href="{% url 'idcards:idcard-dashboard' %}" class="nav-link">
+                    <i class="nav-icon fas fa-tachometer-alt"></i>
+                    <p>Dashboard</p>
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'idcards:idcard-list' %}" class="nav-link">
+                    <i class="nav-icon fas fa-list"></i>
+                    <p>All ID Cards</p>
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'idcards:bulk-generate' %}" class="nav-link">
+                    <i class="nav-icon fas fa-layer-group"></i>
+                    <p>Bulk Generate</p>
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a href="{% url 'idcards:manage-templates' %}" class="nav-link">
+                    <i class="nav-icon fas fa-palette"></i>
+                    <p>Templates</p>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+            <!-- System Settings -->
             <li class="nav-item has-treeview">
               <a href="#" class="nav-link">
                 <i class="nav-icon fas fa-cogs"></i>
@@ -1306,21 +1345,22 @@
       if (notifItems) { loadNotifs(); setInterval(loadNotifs, 60000); }
 
       // Floating Action Button
-      const fab = document.createElement('div');
-      fab.innerHTML = `
-        <div id="fab" style="position:fixed; right:16px; bottom:16px; z-index:1061;">
-          <div class="btn-group dropup">
-            <button class="btn btn-primary btn-lg dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Quick actions">
-              <i class="fas fa-plus"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-right shadow">
-              <a class="dropdown-item" href="/students/create/"><i class="fas fa-user-plus mr-2"></i>Add Student</a>
-              <a class="dropdown-item" href="{% url 'invoice-create' %}"><i class="fas fa-file-invoice-dollar mr-2"></i>Create Invoice</a>
-              <a class="dropdown-item" href="{% url 'attendance:register_create' %}"><i class="fas fa-check-square mr-2"></i>Take Attendance</a>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(fab.firstElementChild);
+     // Floating Action Button
+const fab = document.createElement('div');
+fab.innerHTML = `
+  <div id="fab" style="position:fixed; right:16px; bottom:16px; z-index:1061;">
+    <div class="btn-group dropup">
+      <button class="btn btn-primary btn-lg dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Quick actions">
+        <i class="fas fa-plus"></i>
+      </button>
+      <div class="dropdown-menu dropdown-menu-right shadow">
+        <a class="dropdown-item" href="/students/create/"><i class="fas fa-user-plus mr-2"></i>Add Student</a>
+        <a class="dropdown-item" href="/finance/invoice/create/"><i class="fas fa-file-invoice-dollar mr-2"></i>Create Invoice</a>
+        <a class="dropdown-item" href="/attendance/register/create/"><i class="fas fa-check-square mr-2"></i>Take Attendance</a>
+      </div>
+    </div>
+  </div>`;
+document.body.appendChild(fab.firstElementChild);
     })();
   </script>
 </body>
