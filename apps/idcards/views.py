@@ -11,8 +11,6 @@ from apps.corecode.models import StudentClass
 from .models import StudentIDCard, IDCardTemplate
 from .utils import generate_student_id, generate_barcode
 from django.views.generic import View
-from django.contrib import messages
-from apps.students.models import Student
 
 @login_required
 def idcard_dashboard(request):
@@ -21,10 +19,14 @@ def idcard_dashboard(request):
     idcards_generated = StudentIDCard.objects.count()
     expired_cards = StudentIDCard.objects.filter(expiry_date__lt=timezone.now().date()).count()
     
+    # Calculate coverage percentage
+    coverage_percentage = (idcards_generated / total_students * 100) if total_students > 0 else 0
+    
     context = {
         'total_students': total_students,
         'idcards_generated': idcards_generated,
         'expired_cards': expired_cards,
+        'coverage_percentage': round(coverage_percentage, 1),
     }
     return render(request, 'idcards/dashboard.html', context)
 
@@ -59,11 +61,20 @@ def generate_id_card(request, student_id):
 def bulk_generate_id_cards(request):
     """Bulk generate ID cards for all active students"""
     if request.method == 'POST':
-        student_ids = request.POST.getlist('students')
-        if student_ids:
-            generated_count = 0
-            for student_id in student_ids:
-                student = get_object_or_404(Student, id=student_id)
+        scope = request.POST.get('scope', 'all')
+        class_id = request.POST.get('class_id')
+        
+        # Determine which students to process
+        if scope == 'class' and class_id:
+            student_class = get_object_or_404(StudentClass, id=class_id)
+            students = Student.objects.filter(current_class=student_class, current_status='active')
+        else:
+            students = Student.objects.filter(current_status='active')
+        
+        generated_count = 0
+        for student in students:
+            # Check if student already has an ID card
+            if not StudentIDCard.objects.filter(student=student).exists():
                 id_card, created = StudentIDCard.objects.get_or_create(
                     student=student,
                     defaults={
@@ -74,17 +85,31 @@ def bulk_generate_id_cards(request):
                 )
                 if created:
                     generated_count += 1
-            
-            messages.success(request, f'Successfully generated {generated_count} ID cards')
-            return redirect('idcards:idcard-list')
+        
+        if generated_count > 0:
+            messages.success(request, f'Successfully generated {generated_count} new ID cards')
+        else:
+            messages.info(request, 'No new ID cards were generated. All selected students already have ID cards.')
+        
+        return redirect('idcards:idcard-list')
     
     # GET request - show student selection
     students = Student.objects.filter(current_status='active')
     classes = StudentClass.objects.all()
     
+    # Add statistics for the template
+    total_students = students.count()
+    generated_count = StudentIDCard.objects.count()
+    pending_count = total_students - generated_count
+    coverage_percentage = (generated_count / total_students * 100) if total_students > 0 else 0
+    
     context = {
         'students': students,
         'classes': classes,
+        'total_students': total_students,
+        'generated_count': generated_count,
+        'pending_count': pending_count,
+        'coverage_percentage': round(coverage_percentage, 1),
     }
     return render(request, 'idcards/bulk_generate.html', context)
 
@@ -120,7 +145,12 @@ def bulk_generate_class_id_cards(request, class_id):
 @login_required
 def download_id_card_pdf(request, student_id):
     """Download individual ID card as PDF"""
-    from apps.result.views import render_to_pdf
+    # Import inside function to avoid circular imports
+    try:
+        from apps.result.views import render_to_pdf
+    except ImportError:
+        messages.error(request, 'PDF generation is not available')
+        return redirect('idcards:generate-idcard', student_id=student_id)
     
     student = get_object_or_404(Student, id=student_id)
     id_card = get_object_or_404(StudentIDCard, student=student)
@@ -192,10 +222,6 @@ def renew_id_card(request, student_id):
     messages.success(request, f'ID card renewed for {student.get_full_name()}. Valid until {id_card.expiry_date}')
     return redirect('idcards:generate-idcard', student_id=student_id)
 
-
-
-
-# Add this class to your views.py
 class IDCardSearchView(View):
     def get(self, request):
         return render(request, 'idcards/idcard_search.html')

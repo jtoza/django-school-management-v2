@@ -40,7 +40,7 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <a href="{% url 'student-create' %}?class={{ student_class.id }}" class="btn btn-primary">
+                    <a href="{% url 'students:student-create' %}?class={{ student_class.id }}" class="btn btn-primary">
                         <i class="fas fa-user-plus mr-1"></i> Add Student to Class
                     </a>
                     
@@ -52,10 +52,10 @@
                     </a>
                     {% endif %}
                     
-                    <a href="{% url 'create-result' %}?class={{ student_class.id }}" class="btn btn-warning">
+                    <a href="{% url 'create-result' %}?class={{ student_class.id }}" class="btn btn-warning"></a>
                         <i class="fas fa-chart-line mr-1"></i> Enter Results
                     </a>
-                    <a href="{% url 'student-list' %}?class={{ student_class.id }}" class="btn btn-info">
+                    <a href="{% url 'students:student-list' %}?class={{ student_class.id }}" class="btn btn-info">
                         <i class="fas fa-list mr-1"></i> View All Students
                     </a>
                 </div>
@@ -137,12 +137,14 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{% url 'student-detail' student.id %}" class="btn btn-sm btn-outline-primary" title="View Student">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a href="{% url 'student-update' student.id %}" class="btn btn-sm btn-outline-secondary" title="Edit Student">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
+                                    <div class="btn-group">
+                                        <a href="{% url 'students:student-detail' student.id %}" class="btn btn-sm btn-outline-primary" title="View Student">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{% url 'students:student-update' student.id %}" class="btn btn-sm btn-outline-secondary" title="Edit Student">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -154,7 +156,7 @@
                     <i class="fas fa-user-slash fa-3x text-muted mb-3"></i>
                     <h5>No Students in this Class</h5>
                     <p class="text-muted">There are no students assigned to this class yet.</p>
-                    <a href="{% url 'student-create' %}?class={{ student_class.id }}" class="btn btn-primary">
+                    <a href="{% url 'students:student-create' %}?class={{ student_class.id }}" class="btn btn-primary">
                         <i class="fas fa-user-plus mr-1"></i> Add First Student
                     </a>
                 </div>
@@ -200,6 +202,14 @@
 
 .table td {
     vertical-align: middle;
+}
+
+.btn-group .btn {
+    margin-right: 0.25rem;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
 }
 </style>
 {% endblock %}
